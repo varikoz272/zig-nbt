@@ -3,7 +3,15 @@ const Allocator = std.mem.Allocator;
 
 const nbt = @import("nbt.zig");
 
-pub fn readTag(reader: anytype, allocator: Allocator) !nbt.Tag {
+const ReadError = error{
+    OutOfMemory,
+    InvalidData,
+    NameTooLong,
+    UnsupportedTagType,
+    EndOfStream,
+};
+
+pub fn readTag(reader: anytype, allocator: Allocator) ReadError!nbt.Tag {
     const type_byte = try reader.readByte();
     const tag_type: nbt.TagType = @enumFromInt(type_byte);
 
@@ -83,7 +91,7 @@ pub fn readTag(reader: anytype, allocator: Allocator) !nbt.Tag {
     return tag;
 }
 
-pub fn readTagValue(reader: anytype, tag_type: nbt.TagType, allocator: Allocator) !nbt.TagValue {
+pub fn readTagValue(reader: anytype, tag_type: nbt.TagType, allocator: Allocator) ReadError!nbt.TagValue {
     return switch (tag_type) {
         .Byte => nbt.TagValue{ .Byte = try reader.readByte() },
         .Short => nbt.TagValue{ .Short = try reader.readInt(i16, .big) },
@@ -107,6 +115,28 @@ pub fn readTagValue(reader: anytype, tag_type: nbt.TagType, allocator: Allocator
             try reader.readNoEof(string);
             break :blk nbt.TagValue{ .String = string };
         },
+        .List => blk: {
+            const list_type: nbt.TagType = @enumFromInt(try reader.readByte());
+
+            const list_len = try reader.readInt(i32, .big);
+            if (list_len == 0) break :blk nbt.TagValue{ .List = std.ArrayList(nbt.TagValue).init(allocator) };
+
+            var list = try std.ArrayList(nbt.TagValue).initCapacity(allocator, @intCast(list_len));
+            for (0..@intCast(list_len)) |_| try list.append(try readTagValue(reader, list_type, allocator));
+
+            break :blk nbt.TagValue{ .List = list };
+        },
+
+        .Compound => blk: {
+            var compound = std.ArrayList(nbt.Tag).init(allocator);
+            var inner_tag: nbt.Tag = try readTag(reader, allocator);
+            while (inner_tag.value != .End) : (inner_tag = try readTag(reader, allocator))
+                try compound.append(inner_tag);
+
+            try compound.append(nbt.Tag.End());
+            break :blk nbt.TagValue{ .Compound = compound };
+        },
+
         .IntArray => blk: {
             const len = try reader.readInt(i32, .big);
             if (len == 0) return nbt.TagValue{ .End = {} };
@@ -124,7 +154,6 @@ pub fn readTagValue(reader: anytype, tag_type: nbt.TagType, allocator: Allocator
             break :blk nbt.TagValue{ .LongArray = array };
         },
         .End => nbt.TagValue{ .End = {} },
-        else => unreachable,
     };
 }
 

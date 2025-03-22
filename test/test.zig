@@ -116,16 +116,16 @@ const nbt = @import("nbt");
 // }
 
 test "read light" {
-    const file = try std.fs.cwd().openFile("light_test_write.nbt", .{});
+    const file = try std.fs.cwd().openFile("chess_copy", .{});
     defer file.close();
 
-    var file_buffer: [1024]u8 = undefined;
+    var file_buffer: [8196 * 400]u8 = undefined;
     const file_len = try file.readAll(&file_buffer);
 
     var stream = std.io.fixedBufferStream(file_buffer[0..file_len]);
     const reader = stream.reader();
 
-    var buffer: [8196]u8 = undefined;
+    var buffer: [8196 * 400]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const tag = try nbt.Reader.readTag(reader, fba.allocator());
