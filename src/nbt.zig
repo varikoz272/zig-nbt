@@ -1,8 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+pub const Reader = @import("Reader.zig");
+pub const Printer = @import("Printer.zig");
 
 /// Represents all possible data tags used by NBT.
-/// The value of the enum is a byte that gets placed before the actual value in NBT encoding.
 pub const TagType = enum(u8) {
     End = 0x00,
     Byte = 0x01,
@@ -17,10 +18,16 @@ pub const TagType = enum(u8) {
     Compound = 0x0A,
     IntArray = 0x0B,
     LongArray = 0x0C,
+
+    pub fn has_name(self: @This()) bool {
+        return switch (self) {
+            .End => false,
+            else => true,
+        };
+    }
 };
 
 /// Represents all possible data tags used by NBT with Zig data types.
-/// Compatible with Java types.
 pub const TagValue = union(TagType) {
     const Self = @This();
 
@@ -33,10 +40,28 @@ pub const TagValue = union(TagType) {
     Double: f64,
     ByteArray: []u8,
     String: []const u8,
-    List: std.ArrayList(Tag),
-    Compound: *std.ArrayList(Tag),
+    List: std.ArrayList(TagValue),
+    Compound: std.ArrayList(Tag),
     IntArray: []i32,
     LongArray: []i64,
+
+    pub fn from_type(tag_type: TagType) Self {
+        return switch (tag_type) {
+            .End => TagValue{ .End = undefined },
+            .Byte => TagValue{ .Byte = undefined },
+            .Short => TagValue{ .Short = undefined },
+            .Int => TagValue{ .Int = undefined },
+            .Long => TagValue{ .Long = undefined },
+            .Float => TagValue{ .Float = undefined },
+            .Double => TagValue{ .Double = undefined },
+            .ByteArray => TagValue{ .ByteArray = undefined },
+            .String => TagValue{ .String = undefined },
+            .List => TagValue{ .List = undefined },
+            .Compound => TagValue{ .Compound = undefined },
+            .IntArray => TagValue{ .IntArray = undefined },
+            .LongArray => TagValue{ .LongArray = undefined },
+        };
+    }
 };
 
 pub const Tag = struct {
@@ -99,7 +124,7 @@ pub const Tag = struct {
                     try writer.writeInt(i32, @intCast(v.items.len), .big);
                     // Write list items (values only!)
                     for (v.items) |item| {
-                        switch (item.value) {
+                        switch (item) {
                             .Byte => |val| try buffer.append(val),
                             .Short => |val| try writer.writeInt(i16, val, .big),
                             .Int => |val| try writer.writeInt(i32, val, .big),
@@ -147,6 +172,11 @@ pub const Tag = struct {
                 }
             },
         }
+    }
+
+    /// Short way of creating an End tag
+    pub fn End() Tag {
+        return Tag.init("", .{ .End = {} });
     }
 };
 
